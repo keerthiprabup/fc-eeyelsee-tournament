@@ -30,7 +30,7 @@ interface GoogleSheetsMatch {
 const initialTournamentData: Match[] = []
 
 const MatchCard = ({ match }: { match: Match }) => (
-  <Card className="w-48 h-20 bg-card border-border hover:bg-accent/10 transition-colors">
+  <Card className="w-44 sm:w-48 h-20 bg-card border-border hover:bg-accent/10 transition-colors">
     <CardContent className="p-3 h-full flex flex-col justify-center gap-2">
       <div className="flex justify-between items-center text-sm">
         <span className="font-medium truncate">{match.team1.name}</span>
@@ -119,9 +119,9 @@ export default function TournamentBracket() {
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-3 mb-4">
             <Trophy className="w-8 h-8 text-primary" />
-            <h1 className="text-3xl font-bold text-balance">FC EEYELSEE PRESENTS</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-balance">FC EEYELSEE PRESENTS</h1>
           </div>
-          <h2 className="text-5xl font-bold text-primary mb-2 text-balance">7'S FOOTBALL TOURNAMENT</h2>
+          <h2 className="text-3xl sm:text-5xl font-bold text-primary mb-2 text-balance">7'S FOOTBALL TOURNAMENT</h2>
         </div>
         <div className="flex justify-center items-center h-64">
           <div className="text-lg text-muted-foreground">Loading tournament data...</div>
@@ -136,9 +136,9 @@ export default function TournamentBracket() {
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-3 mb-4">
             <Trophy className="w-8 h-8 text-primary" />
-            <h1 className="text-3xl font-bold text-balance">FC EEYELSEE PRESENTS</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-balance">FC EEYELSEE PRESENTS</h1>
           </div>
-          <h2 className="text-5xl font-bold text-primary mb-2 text-balance">7'S FOOTBALL TOURNAMENT</h2>
+          <h2 className="text-3xl sm:text-5xl font-bold text-primary mb-2 text-balance">7'S FOOTBALL TOURNAMENT</h2>
         </div>
         <div className="flex justify-center items-center h-64">
           <div className="text-lg text-muted-foreground">
@@ -156,83 +156,86 @@ export default function TournamentBracket() {
   const finalMatch = tournamentData.slice(14, 15)       // 2 teams → 1 match
 
   return (
-    <div className="w-full max-w-7xl mx-auto p-6">
+    <div className="w-full max-w-7xl mx-auto p-4">
       {/* Tournament Header */}
-      <div className="text-center mb-8">
-        <div className="flex items-center justify-center gap-3 mb-4">
+      <div className="text-center mb-6">
+        <div className="flex items-center justify-center gap-3 mb-3">
           <Trophy className="w-8 h-8 text-primary" />
-          <h1 className="text-3xl font-bold text-balance">FC EEYELSEE PRESENTS</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-balance">FC EEYELSEE PRESENTS</h1>
         </div>
-        <h2 className="text-5xl font-bold text-primary mb-2 text-balance">
+        <h2 className="text-3xl sm:text-5xl font-bold text-primary mb-2 text-balance">
           7'S FOOTBALL TOURNAMENT
         </h2>
       </div>
 
-      <div className="flex justify-center items-center gap-8">
-        {/* Round 1 */}
-        <div className="flex flex-col gap-6">
-          <h3 className="text-lg font-semibold text-center mb-4">Round 1</h3>
-          {round1Matches.map((match) => (
-            <MatchCard key={match.id} match={match} />
-          ))}
-        </div>
+      {/* Bracket Container - scrollable on mobile */}
+      <div className="overflow-x-auto">
+        <div className="flex flex-col lg:flex-row justify-start items-start gap-8 min-w-max">
+          {/* Round 1 */}
+          <div className="flex flex-col gap-6 min-w-[12rem]">
+            <h3 className="text-lg font-semibold text-center mb-2">Round 1</h3>
+            {round1Matches.map((match) => (
+              <MatchCard key={match.id} match={match} />
+            ))}
+          </div>
 
-        {/* Round 1 → Qualifier connectors */}
-        <div className="flex flex-col items-center gap-6">
-          {round1Matches.map((_, i) => (
-            <div key={i} className="flex items-center">
-              <ConnectorLine direction="horizontal" />
-            </div>
-          ))}
-        </div>
+          {/* Round 1 → Qualifier connectors */}
+          <div className="hidden lg:flex flex-col items-center gap-6">
+            {round1Matches.map((_, i) => (
+              <div key={i} className="flex items-center">
+                <ConnectorLine direction="horizontal" />
+              </div>
+            ))}
+          </div>
 
-        {/* Qualifiers */}
-        <div className="flex flex-col gap-8">
-          <h3 className="text-lg font-semibold text-center mb-4">Qualifiers</h3>
-          {qualifierMatches.map((match) => (
-            <MatchCard key={match.id} match={match} />
-          ))}
-        </div>
+          {/* Qualifiers */}
+          <div className="flex flex-col gap-6 min-w-[12rem]">
+            <h3 className="text-lg font-semibold text-center mb-2">Qualifiers</h3>
+            {qualifierMatches.map((match) => (
+              <MatchCard key={match.id} match={match} />
+            ))}
+          </div>
 
-        {/* Qualifier → Semifinal connectors */}
-        <div className="flex flex-col items-center gap-8">
-          {qualifierMatches.map((_, i) => (
-            <div key={i} className="flex items-center">
-              <ConnectorLine direction="horizontal" />
-            </div>
-          ))}
-        </div>
+          {/* Qualifier → Semifinal connectors */}
+          <div className="hidden lg:flex flex-col items-center gap-8">
+            {qualifierMatches.map((_, i) => (
+              <div key={i} className="flex items-center">
+                <ConnectorLine direction="horizontal" />
+              </div>
+            ))}
+          </div>
 
-        {/* Semifinals */}
-        <div className="flex flex-col gap-12">
-          <h3 className="text-lg font-semibold text-center mb-4">Semifinals</h3>
-          {semifinalMatches.map((match) => (
-            <MatchCard key={match.id} match={match} />
-          ))}
-        </div>
+          {/* Semifinals */}
+          <div className="flex flex-col gap-6 min-w-[12rem]">
+            <h3 className="text-lg font-semibold text-center mb-2">Semifinals</h3>
+            {semifinalMatches.map((match) => (
+              <MatchCard key={match.id} match={match} />
+            ))}
+          </div>
 
-        {/* Semifinal → Final connectors */}
-        <div className="flex flex-col items-center gap-12">
-          {semifinalMatches.map((_, i) => (
-            <div key={i} className="flex items-center">
-              <ConnectorLine direction="horizontal" length="long" />
-            </div>
-          ))}
-        </div>
+          {/* Semifinal → Final connectors */}
+          <div className="hidden lg:flex flex-col items-center gap-12">
+            {semifinalMatches.map((_, i) => (
+              <div key={i} className="flex items-center">
+                <ConnectorLine direction="horizontal" length="long" />
+              </div>
+            ))}
+          </div>
 
-        {/* Final */}
-        <div className="flex flex-col items-center">
-          <Trophy className="w-12 h-12 text-primary mb-4" />
-          <h3 className="text-2xl font-bold text-primary mb-6">FINAL</h3>
-          {finalMatch.length > 0 ? (
-            <MatchCard match={finalMatch[0]} />
-          ) : (
-            <Card className="w-56 h-24 bg-gradient-to-br from-primary/20 to-accent/20 border-primary">
-              <CardContent className="p-4 h-full flex items-center justify-center">
-                <span className="text-primary font-semibold">Championship Match</span>
-              </CardContent>
-            </Card>
-          )}
+          {/* Final */}
+          <div className="flex flex-col items-center min-w-[12rem]">
+            <Trophy className="w-12 h-12 text-primary mb-3" />
+            <h3 className="text-xl sm:text-2xl font-bold text-primary mb-4">FINAL</h3>
+            {finalMatch.length > 0 ? (
+              <MatchCard match={finalMatch[0]} />
+            ) : (
+              <Card className="w-48 h-20 bg-gradient-to-br from-primary/20 to-accent/20 border-primary">
+                <CardContent className="p-4 h-full flex items-center justify-center">
+                  <span className="text-primary font-semibold">Championship Match</span>
+                </CardContent>
+              </Card>
+            )}
+          </div>
         </div>
       </div>
     </div>
