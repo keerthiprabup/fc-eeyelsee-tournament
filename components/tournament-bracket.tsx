@@ -5,20 +5,6 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Trophy } from "lucide-react"
 
-/**
- * TournamentBracket.tsx
- *
- * - 16 teams assumed:
- *   - Round of 16: indices 0..7   (8 matches)
- *   - Quarterfinals: indices 8..11 (4 matches)
- *   - Semifinals: indices 12..13   (2 matches)
- *   - Final: index 14              (1 match)
- *
- * The code is defensive: if the API returns fewer matches it renders "TBD" placeholders.
- */
-
-/* ----------------------------- Types / Helpers ----------------------------- */
-
 interface Team {
   name: string
   score?: number
@@ -31,6 +17,7 @@ interface Match {
   team2: Team
   round?: string
   completed?: boolean
+  dateObj?: Date | null
 }
 
 const initialTournamentData: Match[] = []
@@ -41,9 +28,9 @@ const createTBDMatch = (idSuffix = ""): Match => ({
   team2: { name: "TBD" },
   round: "TBD",
   completed: false,
+  dateObj: null,
 })
 
-/* safe slice that returns expectedCount matches (fills with TBD if missing) */
 const safeSlice = (arr: Match[], start: number, end: number, expectedCount: number) => {
   const slice = arr.slice(start, end)
   const out = slice.slice(0, expectedCount)
@@ -51,7 +38,6 @@ const safeSlice = (arr: Match[], start: number, end: number, expectedCount: numb
   return out
 }
 
-/* group pairs: [ [m0,m1], [m2,m3], ... ] */
 const groupPairs = (matches: Match[]) => {
   const pairs: [Match, Match][] = []
   for (let i = 0; i < matches.length; i += 2) {
@@ -64,90 +50,123 @@ const groupPairs = (matches: Match[]) => {
 
 /* ----------------------------- UI Components ------------------------------ */
 
+const TeamRow = ({ team }: { team: Team }) => (
+  <div className="flex justify-between items-center text-sm">
+    <span className={`truncate break-words max-w-[70%] ${team.winner ? "font-bold" : ""}`}>
+      {team.name}
+    </span>
+    {team.score !== undefined && (
+      <Badge variant={team.winner ? "default" : "secondary"} className="text-xs ml-2">
+        {team.score}
+      </Badge>
+    )}
+  </div>
+)
+
 const MatchCard = ({ match }: { match: Match }) => {
   return (
-    <Card className="w-44 sm:w-48 md:w-52 lg:w-56 h-20 bg-card border-border hover:bg-accent/10 transition-colors">
+    <Card className="w-full sm:w-44 md:w-52 lg:w-56 h-auto bg-card border-border hover:bg-accent/10 transition-colors">
       <CardContent className="p-3 h-full flex flex-col justify-center gap-1">
-        <div className="flex justify-between items-center text-sm">
-          <span className="font-medium truncate">{match.team1.name}</span>
-          {match.team1.score !== undefined && (
-            <Badge variant={match.team1.winner ? "default" : "secondary"} className="text-xs">
-              {match.team1.score}
-            </Badge>
-          )}
-        </div>
-        <div className="flex justify-between items-center text-sm">
-          <span className="font-medium truncate">{match.team2.name}</span>
-          {match.team2.score !== undefined && (
-            <Badge variant={match.team2.winner ? "default" : "secondary"} className="text-xs">
-              {match.team2.score}
-            </Badge>
-          )}
-        </div>
+        <TeamRow team={match.team1} />
+        <TeamRow team={match.team2} />
       </CardContent>
     </Card>
   )
 }
 
-/* simple decorative connectors - visible on large screens; vertical on mobile */
 const HorizontalConnector = ({ length = "short" }: { length?: "short" | "long" }) => (
-  <div
-    aria-hidden
-    className={`hidden lg:block bg-border h-0.5 ${length === "short" ? "w-12" : "w-24"} mx-4`}
-  />
+  <div aria-hidden className={`hidden lg:block bg-border h-0.5 ${length === "short" ? "w-12" : "w-24"} mx-4`} />
 )
 
 const VerticalConnector = ({ height = "short" }: { height?: "short" | "long" }) => (
-  <div
-    aria-hidden
-    className={`hidden lg:block bg-border w-0.5 ${height === "short" ? "h-8" : "h-16"} mx-auto`}
-  />
+  <div aria-hidden className={`hidden lg:block bg-border w-0.5 ${height === "short" ? "h-8" : "h-16"} mx-auto`} />
 )
 
-/* ----------------------------- Main Component ----------------------------- */
+const MobileConnector = () => (
+  <div aria-hidden className="flex items-center justify-center sm:hidden my-2">
+    <div className="w-0.5 h-6 bg-border rounded" />
+  </div>
+)
 
 export default function TournamentBracket() {
   const [tournamentData, setTournamentData] = useState<Match[]>(initialTournamentData)
   const [loading, setLoading] = useState<boolean>(true)
+  const [mobileTab, setMobileTab] = useState<'round16' | 'quarters' | 'semis'>('round16')
+  const [isWide, setIsWide] = useState<boolean>(() => typeof window !== 'undefined' ? window.innerWidth >= 1250 : false)
+
+  useEffect(() => {
+    const onResize = () => setIsWide(window.innerWidth >= 1250)
+    onResize()
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
 
   useEffect(() => {
     let mounted = true
+    const normalize = (s: any) => (s === undefined || s === null) ? "" : String(s).trim().toLowerCase()
+
     const fetchMatchData = async () => {
       try {
         setLoading(true)
-        // fetch from your api route; adjust if your endpoint differs
-        const res = await fetch("/api/matches")
+        const res = await fetch('/api/matches')
         const payload = await res.json()
         if (!mounted) return
 
         if (payload?.success && Array.isArray(payload.data)) {
-          // normalize incoming data -> Match[]
-          const matches: Match[] = payload.data.map((m: any, idx: number) => {
-            const score = m.score ?? m.result ?? undefined
-            const t1 = m.team1 ?? m.team_a ?? m.teamA ?? `Team ${idx * 2 + 1}`
-            const t2 = m.team2 ?? m.team_b ?? m.teamB ?? `Team ${idx * 2 + 2}`
-            const team1Score = score?.team1 ?? score?.team_a ?? score?.a
-            const team2Score = score?.team2 ?? score?.team_b ?? score?.b
-            const team1Wins = (typeof team1Score === "number" && typeof team2Score === "number")
-              ? team1Score > team2Score
-              : undefined
-            const team2Wins = (typeof team1Score === "number" && typeof team2Score === "number")
-              ? team2Score > team1Score
-              : undefined
+          let matches: Match[] = payload.data.map((m: any, idx: number) => {
+            const t1Raw = m.team1 ?? m.team_a ?? m.teamA ?? m.Team1 ?? `Team ${idx * 2 + 1}`
+            const t2Raw = m.team2 ?? m.team_b ?? m.teamB ?? m.Team2 ?? `Team ${idx * 2 + 2}`
+            const team1Name = String(t1Raw)
+            const team2Name = String(t2Raw)
+
+            const scoreObj = m.score ?? m.result_score ?? m.scores ?? undefined
+            const team1Score = typeof scoreObj === 'object' ? (scoreObj.team1 ?? scoreObj.team_a ?? scoreObj.a) : (m.score1 ?? m.score_1 ?? undefined)
+            const team2Score = typeof scoreObj === 'object' ? (scoreObj.team2 ?? scoreObj.team_b ?? scoreObj.b) : (m.score2 ?? m.score_2 ?? undefined)
+
+            const rawResult = m.result ?? m.Result ?? m.winner ?? m.Winner ?? undefined
+            const resultNormalized = normalize(rawResult)
+
+            const t1Norm = normalize(team1Name)
+            const t2Norm = normalize(team2Name)
+
+            let team1Wins: boolean | undefined = undefined
+            let team2Wins: boolean | undefined = undefined
+
+            if (resultNormalized) {
+              if (["team1", "1", "a"].includes(resultNormalized)) team1Wins = true
+              else if (["team2", "2", "b"].includes(resultNormalized)) team2Wins = true
+              else {
+                if (resultNormalized === t1Norm) team1Wins = true
+                else if (resultNormalized === t2Norm) team2Wins = true
+                else if (t1Norm && t1Norm.includes(resultNormalized)) team1Wins = true
+                else if (t2Norm && t2Norm.includes(resultNormalized)) team2Wins = true
+              }
+            }
+
+            // parse date
+            const dateStr = m.datetime ?? m.date ?? m.Date ?? null
+            const dateObj = dateStr ? new Date(dateStr) : null
 
             return {
               id: m.id ?? `match-${idx + 1}`,
-              team1: { name: t1, score: typeof team1Score === "number" ? team1Score : undefined, winner: team1Wins },
-              team2: { name: t2, score: typeof team2Score === "number" ? team2Score : undefined, winner: team2Wins },
+              team1: { name: team1Name, score: team1Score, winner: team1Wins },
+              team2: { name: team2Name, score: team2Score, winner: team2Wins },
               round: m.round ?? undefined,
-              completed: m.status === "completed" || m.status === "finished" || m.completed === true,
-            } as Match
+              completed: false,
+              dateObj,
+            }
           })
 
-          // guarantee we return a predictable length array (at least 15 entries expected)
+          // ✅ Sort by date (latest first)
+          matches.sort((a, b) => {
+            if (!a.dateObj && !b.dateObj) return 0
+            if (!a.dateObj) return 1
+            if (!b.dateObj) return -1
+            return b.dateObj.getTime() - a.dateObj.getTime()
+          })
+
           setTournamentData(matches)
         } else {
-          // if unexpected response shape, clear and allow placeholders
           setTournamentData([])
         }
       } catch (err) {
@@ -159,14 +178,13 @@ export default function TournamentBracket() {
     }
 
     fetchMatchData()
-    const interval = setInterval(fetchMatchData, 60000) // refresh every 60s
+    const interval = setInterval(fetchMatchData, 60000)
     return () => {
       mounted = false
       clearInterval(interval)
     }
   }, [])
 
-  /* --------------------------- Loading / Empty UI --------------------------- */
   if (loading) {
     return (
       <div className="w-full max-w-7xl mx-auto p-6">
@@ -175,9 +193,7 @@ export default function TournamentBracket() {
             <Trophy className="w-8 h-8 text-primary" />
             <h1 className="text-2xl sm:text-3xl font-bold text-balance">FC EEYELSEE PRESENTS</h1>
           </div>
-          <h2 className="text-3xl sm:text-5xl font-bold text-primary mb-2 text-balance">
-            7'S FOOTBALL TOURNAMENT
-          </h2>
+          <h2 className="text-3xl sm:text-5xl font-bold text-primary mb-2 text-balance">7'S FOOTBALL TOURNAMENT</h2>
         </div>
         <div className="flex justify-center items-center h-48">
           <div className="text-lg text-muted-foreground">Loading tournament data...</div>
@@ -194,160 +210,228 @@ export default function TournamentBracket() {
             <Trophy className="w-8 h-8 text-primary" />
             <h1 className="text-2xl sm:text-3xl font-bold text-balance">FC EEYELSEE PRESENTS</h1>
           </div>
-          <h2 className="text-3xl sm:text-5xl font-bold text-primary mb-2 text-balance">
-            7'S FOOTBALL TOURNAMENT
-          </h2>
+          <h2 className="text-3xl sm:text-5xl font-bold text-primary mb-2 text-balance">7'S FOOTBALL TOURNAMENT</h2>
         </div>
         <div className="flex justify-center items-center h-64">
-          <div className="text-lg text-muted-foreground">
-            No tournament matches found. Please check the Google Sheets / API data.
-          </div>
+          <div className="text-lg text-muted-foreground">No tournament matches found. Please check the Google Sheets / API data.</div>
         </div>
       </div>
     )
   }
 
   /* ----------------------------- Split Rounds ------------------------------ */
-  // Round of 16 (8 matches)
   const roundOf16 = safeSlice(tournamentData, 0, 8, 8)
-  const leftRound1Pairs = groupPairs(roundOf16.slice(0, 4)) // 2 pairs (4 matches)
-  const rightRound1Pairs = groupPairs(roundOf16.slice(4, 8)) // 2 pairs (4 matches)
+  const leftRound1Pairs = groupPairs(roundOf16.slice(0, 4))
+  const rightRound1Pairs = groupPairs(roundOf16.slice(4, 8))
 
-  // Quarterfinals (4 matches)
   const quarters = safeSlice(tournamentData, 8, 12, 4)
-  const leftQuarters = [quarters[0] ?? createTBDMatch("q-l-0"), quarters[1] ?? createTBDMatch("q-l-1")]
-  const rightQuarters = [quarters[2] ?? createTBDMatch("q-r-0"), quarters[3] ?? createTBDMatch("q-r-1")]
+  const leftQuarters = [quarters[0], quarters[1]]
+  const rightQuarters = [quarters[2], quarters[3]]
 
-  // Semifinals
   const semiLeft = tournamentData[12] ?? createTBDMatch("semi-left")
   const semiRight = tournamentData[13] ?? createTBDMatch("semi-right")
-
-  // Final
   const finalMatch = tournamentData[14] ?? createTBDMatch("final")
+
+  const allRoundOf16 = [...roundOf16.slice(0, 4), ...roundOf16.slice(4, 8)]
+  const semisAndFinal = [semiLeft, semiRight, finalMatch]
 
   /* ------------------------------- Rendering ------------------------------- */
   return (
     <div className="w-full max-w-7xl mx-auto p-4">
-      {/* Header */}
       <div className="text-center mb-6">
         <div className="flex items-center justify-center gap-3 mb-3">
           <Trophy className="w-8 h-8 text-primary" />
           <h1 className="text-2xl sm:text-3xl font-bold text-balance">FC EEYELSEE PRESENTS</h1>
         </div>
-        <h2 className="text-3xl sm:text-5xl font-bold text-primary mb-2 text-balance">
-          7'S FOOTBALL TOURNAMENT
-        </h2>
+        <h2 className="text-3xl sm:text-5xl font-bold text-primary mb-2 text-balance">7'S FOOTBALL TOURNAMENT</h2>
       </div>
 
-      {/* Bracket Container - horizontally scrollable on small screens; wide layout on large screens */}
       <div className="overflow-x-auto">
-        <div className="min-w-max flex flex-col lg:flex-row items-start lg:items-center gap-6 lg:gap-10">
-          {/* --------------------------- LEFT SIDE --------------------------- */}
-          <div className="flex flex-col items-end gap-6">
-            <h3 className="text-lg font-semibold text-center mb-1">Round 1</h3>
+        {/* MOBILE view */}
+        {!isWide && (
+          <div className="block p-4">
+            <div className="mb-4">
+              <div role="tablist" aria-label="Tournament rounds" className="flex gap-2">
+                <button
+                  role="tab"
+                  aria-selected={mobileTab === 'round16'}
+                  onClick={() => setMobileTab('round16')}
+                  className={`px-3 py-2 rounded-md text-sm font-medium w-full ${mobileTab === 'round16' ? 'bg-primary text-white' : 'bg-card border'}`}>
+                  Round of 16
+                </button>
+                <button
+                  role="tab"
+                  aria-selected={mobileTab === 'quarters'}
+                  onClick={() => setMobileTab('quarters')}
+                  className={`px-3 py-2 rounded-md text-sm font-medium w-full ${mobileTab === 'quarters' ? 'bg-primary text-white' : 'bg-card border'}`}>
+                  Quarterfinals
+                </button>
+                <button
+                  role="tab"
+                  aria-selected={mobileTab === 'semis'}
+                  onClick={() => setMobileTab('semis')}
+                  className={`px-3 py-2 rounded-md text-sm font-medium w-full ${mobileTab === 'semis' ? 'bg-primary text-white' : 'bg-card border'}`}>
+                  Semis & Final
+                </button>
+              </div>
+            </div>
 
-            {/* leftRound1Pairs contains two pairs (each pair contains two MatchCards stacked) */}
-            <div className="flex flex-col gap-8 lg:gap-12">
-              {leftRound1Pairs.map((pair, idx) => (
-                <div key={idx} className="flex items-center lg:items-end gap-4">
-                  <div className="flex flex-col gap-3">
-                    <MatchCard match={pair[0]} />
-                    <MatchCard match={pair[1]} />
+            <div>
+              {mobileTab === 'round16' && (
+                <section aria-labelledby="mobile-r16">
+                  <h3 id="mobile-r16" className="text-lg font-semibold mb-2">Round of 16</h3>
+                  <div className="grid grid-cols-1 gap-3">
+                    {allRoundOf16.map((m) => (
+                      <div key={m.id} className="p-3 bg-card border rounded">
+                        <TeamRow team={m.team1} />
+                        <TeamRow team={m.team2} />
+                      </div>
+                    ))}
                   </div>
+                </section>
+              )}
 
-                  {/* connector from pair -> quarter (decorative on large screens) */}
-                  <div className="hidden lg:flex flex-col items-center">
-                    <HorizontalConnector />
-                    <VerticalConnector height="long" />
-                    <HorizontalConnector />
+              {mobileTab === 'quarters' && (
+                <section aria-labelledby="mobile-qf">
+                  <h3 id="mobile-qf" className="text-lg font-semibold mb-2">Quarterfinals</h3>
+                  <div className="grid grid-cols-1 gap-3">
+                    {quarters.map((m) => (
+                      <div key={m.id} className="p-3 bg-card border rounded">
+                        <TeamRow team={m.team1} />
+                        <TeamRow team={m.team2} />
+                      </div>
+                    ))}
                   </div>
+                </section>
+              )}
+
+              {mobileTab === 'semis' && (
+                <section aria-labelledby="mobile-semis">
+                  <h3 id="mobile-semis" className="text-lg font-semibold mb-2">Semifinals & Final</h3>
+                  <div className="grid grid-cols-1 gap-3">
+                    {semisAndFinal.map((m) => (
+                      <div key={m.id} className="p-3 bg-card border rounded">
+                        <TeamRow team={m.team1} />
+                        <TeamRow team={m.team2} />
+                        {m.id === finalMatch.id && (m.team1.winner || m.team2.winner) && (
+                          <div className="text-center mt-2">
+                            <Trophy className="inline h-4 w-4 text-yellow-500 mr-1" />
+                            <span className="font-semibold text-sm">
+                              Winner: {m.team1.winner ? m.team1.name : m.team2.winner ? m.team2.name : ""}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* DESKTOP view */}
+        {isWide && (
+          <div className="hidden lg:block">
+            <div className="min-w-max flex flex-col lg:flex-row items-start lg:items-center gap-6 lg:gap-10">
+              {/* Round 1 Left */}
+              <section aria-labelledby="round1-left" className="flex flex-col items-end gap-6 w-full sm:w-auto">
+                <h3 id="round1-left" className="text-lg font-semibold text-center mb-1">Round 1</h3>
+                <div className="flex flex-col gap-6 lg:gap-12 w-full">
+                  {leftRound1Pairs.map((pair, idx) => (
+                    <div key={idx} className="flex flex-col sm:flex-row items-center sm:items-end gap-4 w-full">
+                      <div className="flex flex-col gap-3 w-full sm:w-auto">
+                        <MatchCard match={pair[0]} />
+                        <MobileConnector />
+                        <MatchCard match={pair[1]} />
+                      </div>
+                      <div className="hidden lg:flex flex-col items-center">
+                        <HorizontalConnector />
+                        <VerticalConnector height="long" />
+                        <HorizontalConnector />
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </div>
+              </section>
 
-          {/* Quarterfinals (left) */}
-          <div className="flex flex-col items-center gap-10">
-            <h3 className="text-lg font-semibold mb-1">Quarterfinals</h3>
-            <div className="flex flex-col gap-8">
-              <div className="flex flex-col items-center gap-3">
-                <MatchCard match={leftQuarters[0]} />
-              </div>
-              <div className="flex flex-col items-center gap-3">
-                <MatchCard match={leftQuarters[1]} />
-              </div>
-            </div>
-
-            {/* connectors from quarters -> semi (decorative) */}
-            <div className="hidden lg:flex flex-col items-center">
-              <HorizontalConnector />
-            </div>
-          </div>
-
-          {/* Semifinal (left) */}
-          <div className="flex flex-col items-center gap-6">
-            <h3 className="text-lg font-semibold mb-1">Semifinal</h3>
-            <div className="mt-2">
-              <MatchCard match={semiLeft} />
-            </div>
-          </div>
-
-          {/* ----------------------------- FINAL ----------------------------- */}
-          <div className="flex flex-col items-center mx-4 lg:mx-8">
-            <Trophy className="w-12 h-12 text-primary mb-2" />
-            <h3 className="text-xl sm:text-2xl font-bold text-primary mb-3">FINAL</h3>
-            <div className="mb-2">
-              <MatchCard match={finalMatch} />
-            </div>
-          </div>
-
-          {/* ------------------------- RIGHT (mirror) ------------------------ */}
-          {/* Semifinal (right) */}
-          <div className="flex flex-col items-center gap-6">
-            <h3 className="text-lg font-semibold mb-1">Semifinal</h3>
-            <div className="mt-2">
-              <MatchCard match={semiRight} />
-            </div>
-            <div className="hidden lg:flex flex-col items-center">
-              <HorizontalConnector />
-            </div>
-          </div>
-
-          {/* Quarterfinals (right) */}
-          <div className="flex flex-col items-center gap-10">
-            <h3 className="text-lg font-semibold mb-1">Quarterfinals</h3>
-            <div className="flex flex-col gap-8">
-              <div className="flex flex-col items-center gap-3">
-                <MatchCard match={rightQuarters[0]} />
-              </div>
-              <div className="flex flex-col items-center gap-3">
-                <MatchCard match={rightQuarters[1]} />
-              </div>
-            </div>
-          </div>
-
-          {/* Round 1 (right) */}
-          <div className="flex flex-col items-start gap-6">
-            <h3 className="text-lg font-semibold text-center mb-1">Round 1</h3>
-            <div className="flex flex-col gap-8 lg:gap-12">
-              {rightRound1Pairs.map((pair, idx) => (
-                <div key={idx} className="flex items-center lg:items-start gap-4">
-                  {/* connector from quarter -> pair (decorative on large screens) */}
-                  <div className="hidden lg:flex flex-col items-center">
-                    <HorizontalConnector />
-                    <VerticalConnector height="long" />
-                    <HorizontalConnector />
-                  </div>
-
-                  <div className="flex flex-col gap-3">
-                    <MatchCard match={pair[0]} />
-                    <MatchCard match={pair[1]} />
-                  </div>
+              {/* Left Quarters */}
+              <section aria-labelledby="quarters-left" className="flex flex-col items-center gap-6 w-full sm:w-auto">
+                <h3 id="quarters-left" className="text-lg font-semibold mb-1">Quarterfinals</h3>
+                <div className="flex flex-col gap-6 w-full sm:w-auto">
+                  <MatchCard match={leftQuarters[0]} />
+                  <MatchCard match={leftQuarters[1]} />
                 </div>
-              ))}
+                <div className="hidden lg:flex flex-col items-center">
+                  <HorizontalConnector />
+                </div>
+              </section>
+
+              {/* Semi Left */}
+              <section aria-labelledby="semi-left" className="flex flex-col items-center gap-6 w-full sm:w-auto">
+                <h3 id="semi-left" className="text-lg font-semibold mb-1">Semifinal</h3>
+                <div className="mt-2 w-full sm:w-auto">
+                  <MatchCard match={semiLeft} />
+                </div>
+              </section>
+
+              {/* Final */}
+              <section aria-labelledby="final" className="flex flex-col items-center mx-4 lg:mx-8 w-full sm:w-auto">
+                <Trophy className="w-12 h-12 text-primary mb-2" />
+                <h3 id="final" className="text-xl sm:text-2xl font-bold text-primary mb-3">FINAL</h3>
+                <div className="mb-2 w-full sm:w-auto">
+                  <MatchCard match={finalMatch} />
+                </div>
+                {finalMatch && (finalMatch.team1.winner || finalMatch.team2.winner) && (
+                  <div className="flex flex-col items-center mt-4">
+                    <div className="text-lg font-bold text-primary">🏆 WINNER 🏆</div>
+                    <div className="text-xl sm:text-2xl font-bold text-yellow-500">
+                      {finalMatch.team1.winner ? finalMatch.team1.name : finalMatch.team2.winner ? finalMatch.team2.name : ""}
+                    </div>
+                  </div>
+                )}
+              </section>
+
+              {/* Semi Right */}
+              <section aria-labelledby="semi-right" className="flex flex-col items-center gap-6 w-full sm:w-auto">
+                <h3 id="semi-right" className="text-lg font-semibold mb-1">Semifinal</h3>
+                <div className="mt-2 w-full sm:w-auto">
+                  <MatchCard match={semiRight} />
+                </div>
+              </section>
+
+              {/* Right Quarters */}
+              <section aria-labelledby="quarters-right" className="flex flex-col items-center gap-6 w-full sm:w-auto">
+                <h3 id="quarters-right" className="text-lg font-semibold mb-1">Quarterfinals</h3>
+                <div className="flex flex-col gap-6 w-full sm:w-auto">
+                  <MatchCard match={rightQuarters[0]} />
+                  <MatchCard match={rightQuarters[1]} />
+                </div>
+              </section>
+
+              {/* Round 1 Right */}
+              <section aria-labelledby="round1-right" className="flex flex-col items-start gap-6 w-full sm:w-auto">
+                <h3 id="round1-right" className="text-lg font-semibold text-center mb-1">Round 1</h3>
+                <div className="flex flex-col gap-6 lg:gap-12 w-full">
+                  {rightRound1Pairs.map((pair, idx) => (
+                    <div key={idx} className="flex flex-col sm:flex-row items-center sm:items-start gap-4 w-full">
+                      <div className="flex flex-col gap-3 w-full sm:w-auto">
+                        <MatchCard match={pair[0]} />
+                        <MobileConnector />
+                        <MatchCard match={pair[1]} />
+                      </div>
+                      <div className="hidden lg:flex flex-col items-center">
+                        <HorizontalConnector />
+                        <VerticalConnector height="long" />
+                        <HorizontalConnector />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
             </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   )
